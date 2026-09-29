@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Évaluation Orale</title>
+<title>Évaluations</title>
 <style>
   :root{
     --bleu:#1d5fa8;
@@ -231,6 +231,15 @@
   .aide{font-size:12px; color:var(--gris); margin-top:4px;}
   .separateur{border:none; border-top:1px solid var(--bordure); margin:16px 0;}
 
+  .banniere-alerte{background:#fff4e5; border:1.5px solid #f0b35a; color:#8a4b00; border-radius:12px; padding:12px 14px; font-size:13px; font-weight:600; margin-bottom:14px;}
+
+  .piece-bloc{border:1px solid var(--bordure); border-radius:10px; padding:10px; margin-bottom:12px; background:#fbfcfe;}
+  .piece-titre{font-weight:700; font-size:14px; color:var(--bleu-fonce); margin-bottom:4px;}
+  .piece-info{font-size:12px; color:var(--gris); margin-bottom:6px;}
+  .piece-thumbs{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+  .piece-thumbs img{height:72px; width:auto; border:1px solid var(--bordure); border-radius:6px; background:#fff;}
+  .ce-ligne-max{font-size:12px; color:var(--gris);}
+
   /* ---- IMPRESSION ---- */
   #printArea{display:none;}
   @media print{
@@ -247,6 +256,10 @@
     .page .bloc{margin-bottom:6px; font-size:13px;}
     .page .bloc b{display:block; font-size:12px; color:#555; margin-bottom:2px;}
     .page .totalPrint{font-weight:bold; font-size:15px;}
+    .page .noteFinale{font-weight:bold; font-size:18px; color:#1d5fa8; margin:6px 0 10px 0;}
+    .pageAttach{padding:8mm !important; text-align:center;}
+    .pageAttach .legendePiece{font-size:11px; color:#666; margin:0 0 4px 0; text-align:left;}
+    .pageAttach img{max-width:100%; max-height:262mm; display:block; margin:0 auto;}
   }
 </style>
 </head>
@@ -255,7 +268,7 @@
 <!-- ECRAN CODE D'ACCES -->
 <div id="gate">
   <div class="card">
-    <h2>Évaluation Orale</h2>
+    <h2>Évaluations</h2>
     <p style="color:#555; font-size:14px;">Accès professeur</p>
     <input type="password" inputmode="numeric" id="gateInput" placeholder="Code d'accès" maxlength="10">
     <div id="gateError"></div>
@@ -267,7 +280,7 @@
 <div id="app" class="hidden">
   <div id="topbar">
     <div>
-      <div class="titre">Évaluation Orale</div>
+      <div class="titre">Évaluations</div>
       <div class="classeNom" id="topClasseNom">Aucune classe sélectionnée</div>
     </div>
     <button id="btnChangerClasse">Changer de classe</button>
@@ -275,7 +288,10 @@
 
   <div class="wrap">
 
-    <!-- VUE CONFIGURATION CLASSE -->
+    <div id="storageWarning" class="banniere-alerte hidden">
+      ⚠️ Le stockage local de cet appareil ou de ce navigateur n'est pas disponible (navigation privée ou données de site bloquées) : vos saisies ne seront pas conservées. Téléchargez régulièrement vos PDF pour ne rien perdre.
+    </div>
+
     <div id="view-setup">
       <div class="carte">
         <h2>1. Choisir ou créer une classe</h2>
@@ -320,16 +336,31 @@ Nom Prénom
         <select id="nouvelleSessionCompetence">
           <option value="POC">Production orale en continu</option>
           <option value="POI">Production orale en interaction</option>
-          <option value="EE">Expression écrite</option>
+          <option value="CE">Compréhension écrite</option>
         </select>
-        <label>Type de travail</label>
-        <div class="row">
-          <label class="radio-inline">
-            <input type="radio" name="nouvelleSessionMode" value="individuel" checked> Individuel
-          </label>
-          <label class="radio-inline">
-            <input type="radio" name="nouvelleSessionMode" value="groupe"> Groupe
-          </label>
+        <div id="blocModeTravail">
+          <label>Type de travail</label>
+          <div class="row">
+            <label class="radio-inline">
+              <input type="radio" name="nouvelleSessionMode" value="individuel" checked> Individuel
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="nouvelleSessionMode" value="groupe"> Groupe
+            </label>
+          </div>
+        </div>
+        <div id="blocCECreation" class="hidden">
+          <label>Note ramenée sur</label>
+          <div class="row">
+            <label class="radio-inline">
+              <input type="radio" name="nouvelleSessionEchelle" value="10"> /10
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="nouvelleSessionEchelle" value="20" checked> /20
+            </label>
+          </div>
+          <label>Total de points de la grille (facultatif, modifiable ensuite)</label>
+          <input type="text" id="nouvelleSessionTotalMax" inputmode="decimal" placeholder="Ex : 40">
         </div>
         <button class="btn btn-vert btn-large" id="btnCreerSession" style="margin-top:12px;">Créer cette évaluation</button>
       </div>
@@ -348,13 +379,54 @@ Nom Prénom
         </div>
       </div>
 
+      <div class="carte hidden" id="carteCEParams">
+        <h2>Note de l'évaluation</h2>
+        <label>Total de points de la grille (à indiquer)</label>
+        <input type="text" id="ceTotalMaxInput" inputmode="decimal" placeholder="Ex : 40">
+        <label>Note ramenée sur</label>
+        <div class="row">
+          <label class="radio-inline">
+            <input type="radio" name="ceEchelle" value="10"> /10
+          </label>
+          <label class="radio-inline">
+            <input type="radio" name="ceEchelle" value="20"> /20
+          </label>
+        </div>
+        <p class="aide">L'appli ne calcule pas le total des points : vous le saisissez pour chaque élève. Elle calcule seulement l'équivalent sur 10 ou sur 20.</p>
+      </div>
+
+      <div class="carte hidden" id="carteCEPieces">
+        <h2>Pièces jointes du PDF</h2>
+        <p class="aide">La grille d'évaluation et le corrigé sont ajoutés à la suite de la fiche de chaque élève dans le PDF. Prenez-les en photo ou en capture d'écran (format image uniquement, pour une impression fiable).</p>
+        <div class="piece-bloc">
+          <div class="piece-titre">Grille d'évaluation</div>
+          <div class="piece-info" id="pieceInfoGrille">Aucune pièce jointe.</div>
+          <div class="piece-thumbs" id="pieceThumbsGrille"></div>
+          <div class="row">
+            <button class="btn btn-bleu" id="btnAjouterGrille">+ Ajouter</button>
+            <button class="btn btn-rouge" id="btnSupprimerGrille" style="flex:none;">Tout supprimer</button>
+          </div>
+          <input type="file" id="fileInputGrille" accept="image/*" multiple class="hidden">
+        </div>
+        <div class="piece-bloc">
+          <div class="piece-titre">Corrigé</div>
+          <div class="piece-info" id="pieceInfoCorrige">Aucune pièce jointe.</div>
+          <div class="piece-thumbs" id="pieceThumbsCorrige"></div>
+          <div class="row">
+            <button class="btn btn-bleu" id="btnAjouterCorrige">+ Ajouter</button>
+            <button class="btn btn-rouge" id="btnSupprimerCorrige" style="flex:none;">Tout supprimer</button>
+          </div>
+          <input type="file" id="fileInputCorrige" accept="image/*" multiple class="hidden">
+        </div>
+      </div>
+
       <div class="carte">
-        <h2>Barème (critères et points)</h2>
+        <h2 id="titreCarteBareme">Barème (critères et points)</h2>
         <div id="criteresEditeur"></div>
         <button class="btn btn-gris" id="btnAjouterCritere">+ Ajouter un critère</button>
         <hr class="separateur">
         <button class="btn btn-bleu btn-large" id="btnValiderBareme">Valider / mettre à jour le barème</button>
-        <p class="aide">Le barème est mémorisé pour cette classe et cette compétence et réutilisé pour vos prochaines évaluations.</p>
+        <p class="aide" id="aideCarteBareme">Le barème est mémorisé pour cette classe et cette compétence et réutilisé pour vos prochaines évaluations.</p>
       </div>
 
       <div class="carte hidden" id="carteGroupes">
@@ -398,20 +470,30 @@ Nom Prénom
         <label>Date de passage de cet élève</label>
         <input type="date" id="evalStudentDate">
 
-        <div id="scoresZone" style="margin-top:14px;"></div>
-        <p class="aide">Saisissez une note pour chaque critère, ou tapez ABS si l'élève était absent sur ce critère.</p>
+        <div id="blocOralTop">
+          <div id="scoresZone" style="margin-top:14px;"></div>
+          <p class="aide">Saisissez une note pour chaque critère, ou tapez ABS si l'élève était absent sur ce critère.</p>
 
-        <div class="total-box" id="totalBox">0 / 0<span>Total</span></div>
+          <div class="total-box" id="totalBox">0 / 0<span>Total</span></div>
 
-        <div class="row" id="subtotalsZone" style="margin:0 0 10px 0;">
-          <div class="subtotal-box hidden" id="subtotalPrepBox">
-            <div class="subtotal-label">Travail préparatoire</div>
-            <div class="subtotal-value" id="subtotalPrepValue">0/0</div>
+          <div class="row" id="subtotalsZone" style="margin:0 0 10px 0;">
+            <div class="subtotal-box hidden" id="subtotalPrepBox">
+              <div class="subtotal-label">Travail préparatoire</div>
+              <div class="subtotal-value" id="subtotalPrepValue">0/0</div>
+            </div>
+            <div class="subtotal-box" id="subtotalOralBox">
+              <div class="subtotal-label">Prestation orale (suivi progression)</div>
+              <div class="subtotal-value" id="subtotalOralValue">0/0</div>
+            </div>
           </div>
-          <div class="subtotal-box" id="subtotalOralBox">
-            <div class="subtotal-label">Prestation orale (suivi progression)</div>
-            <div class="subtotal-value" id="subtotalOralValue">0/0</div>
-          </div>
+        </div>
+
+        <div id="blocCETop" class="hidden">
+          <div id="ceCriteriaZone" style="margin-top:14px;"></div>
+          <p class="aide">Saisissez des points seulement là où c'est nécessaire : les cases laissées vides sont ignorées.</p>
+          <label>Total de points obtenu (à indiquer, ou ABS si absent)</label>
+          <input type="text" id="ceTotalInput" placeholder="Ex : 27">
+          <div class="total-box" id="ceEquivBox">—<span>Équivalent</span></div>
         </div>
 
         <div id="absenceStatusZone" class="hidden">
@@ -423,24 +505,26 @@ Nom Prénom
           </div>
         </div>
 
-        <div class="cp-row">
-          <label>Point d'anglais à revoir</label>
-          <div class="cp-btns">
-            <button type="button" class="btn-cp" data-target="pointAnglaisInput" data-action="copy">📋 Copier</button>
-            <button type="button" class="btn-cp" data-target="pointAnglaisInput" data-action="paste">📥 Coller</button>
+        <div id="blocOralChamps1">
+          <div class="cp-row">
+            <label>Point d'anglais à revoir</label>
+            <div class="cp-btns">
+              <button type="button" class="btn-cp" data-target="pointAnglaisInput" data-action="copy">📋 Copier</button>
+              <button type="button" class="btn-cp" data-target="pointAnglaisInput" data-action="paste">📥 Coller</button>
+            </div>
           </div>
-        </div>
-        <textarea id="pointAnglaisInput" placeholder="Point de langue prioritaire à retravailler..."></textarea>
+          <textarea id="pointAnglaisInput" placeholder="Point de langue prioritaire à retravailler..."></textarea>
 
-        <div class="cp-row">
-          <label>Prononciation à revoir</label>
-          <div class="cp-btns">
-            <button type="button" class="btn-cp" data-target="prononciationInput" data-action="copy">📋 Copier</button>
-            <button type="button" class="btn-cp" data-target="prononciationInput" data-action="paste">📥 Coller</button>
+          <div class="cp-row">
+            <label>Prononciation à revoir</label>
+            <div class="cp-btns">
+              <button type="button" class="btn-cp" data-target="prononciationInput" data-action="copy">📋 Copier</button>
+              <button type="button" class="btn-cp" data-target="prononciationInput" data-action="paste">📥 Coller</button>
+            </div>
           </div>
+          <textarea id="prononciationInput" placeholder="Son(s) ou mot(s) à retravailler..."></textarea>
+          <a href="https://www.deepl.com/translator" target="_blank" rel="noopener" class="lien-outil">🔊 Écouter la prononciation sur DeepL</a>
         </div>
-        <textarea id="prononciationInput" placeholder="Son(s) ou mot(s) à retravailler..."></textarea>
-        <a href="https://www.deepl.com/translator" target="_blank" rel="noopener" class="lien-outil">🔊 Écouter la prononciation sur DeepL</a>
 
         <div id="appreciationIndividuelleZone">
           <div class="cp-row">
@@ -453,41 +537,56 @@ Nom Prénom
           <textarea id="appreciationInput" placeholder="Appréciation générale de la prestation..."></textarea>
         </div>
 
-        <div class="cp-row">
-          <label>Conseils</label>
-          <div class="cp-btns">
-            <button type="button" class="btn-cp" data-target="conseilsInput" data-action="copy">📋 Copier</button>
-            <button type="button" class="btn-cp" data-target="conseilsInput" data-action="paste">📥 Coller</button>
+        <div id="blocCEChamps" class="hidden">
+          <div class="cp-row">
+            <label>Erreurs d'anglais à revoir</label>
+            <div class="cp-btns">
+              <button type="button" class="btn-cp" data-target="erreursAnglaisInput" data-action="copy">📋 Copier</button>
+              <button type="button" class="btn-cp" data-target="erreursAnglaisInput" data-action="paste">📥 Coller</button>
+            </div>
           </div>
+          <textarea id="erreursAnglaisInput" placeholder="Erreurs d'anglais relevées à retravailler..."></textarea>
         </div>
-        <textarea id="conseilsInput" placeholder="Conseils donnés à l'élève..."></textarea>
 
-        <div class="cp-row">
-          <label>Recommandations de travail</label>
-          <div class="cp-btns">
-            <button type="button" class="btn-cp" data-target="recommandationsInput" data-action="copy">📋 Copier</button>
-            <button type="button" class="btn-cp" data-target="recommandationsInput" data-action="paste">📥 Coller</button>
+        <div id="blocOralChamps2">
+          <div class="cp-row">
+            <label>Conseils</label>
+            <div class="cp-btns">
+              <button type="button" class="btn-cp" data-target="conseilsInput" data-action="copy">📋 Copier</button>
+              <button type="button" class="btn-cp" data-target="conseilsInput" data-action="paste">📥 Coller</button>
+            </div>
           </div>
+          <textarea id="conseilsInput" placeholder="Conseils donnés à l'élève..."></textarea>
+
+          <div class="cp-row">
+            <label>Recommandations de travail</label>
+            <div class="cp-btns">
+              <button type="button" class="btn-cp" data-target="recommandationsInput" data-action="copy">📋 Copier</button>
+              <button type="button" class="btn-cp" data-target="recommandationsInput" data-action="paste">📥 Coller</button>
+            </div>
+          </div>
+          <div class="preset-row">
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les conjugaisons.">Conjugaisons</button>
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les verbes irréguliers.">Verbes irréguliers</button>
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les constructions de phrases.">Constructions de phrases</button>
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="BoostYourEnglish.">BoostYourEnglish</button>
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="Atelier des phrases.">Atelier des phrases</button>
+            <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="IrregularVerbs.">IrregularVerbs</button>
+          </div>
+          <textarea id="recommandationsInput" placeholder="Pistes de travail pour progresser..."></textarea>
         </div>
-        <div class="preset-row">
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les conjugaisons.">Conjugaisons</button>
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les verbes irréguliers.">Verbes irréguliers</button>
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="travailler les constructions de phrases.">Constructions de phrases</button>
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="BoostYourEnglish.">BoostYourEnglish</button>
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="Atelier des phrases.">Atelier des phrases</button>
-          <button type="button" class="btn-preset" data-target="recommandationsInput" data-text="IrregularVerbs.">IrregularVerbs</button>
-        </div>
-        <textarea id="recommandationsInput" placeholder="Pistes de travail pour progresser..."></textarea>
 
         <div class="row" style="margin-top:14px;">
           <button class="btn btn-vert btn-large" id="btnEnregistrerEval">Enregistrer l'évaluation</button>
         </div>
         <button class="btn btn-bleu btn-large" id="btnEleveSuivant" style="margin-top:10px;">Enregistrer et passer à l'élève suivant →</button>
 
-        <hr class="separateur">
-        <h2>Progression — historique de cette compétence</h2>
-        <p class="aide">Seule la note de la Prestation orale est prise en compte pour les flèches de progression.</p>
-        <div id="historiqueZone"><p class="aide">Aucune évaluation enregistrée pour l'instant.</p></div>
+        <div id="blocProgression">
+          <hr class="separateur">
+          <h2>Progression — historique de cette compétence</h2>
+          <p class="aide">Seule la note de la Prestation orale est prise en compte pour les flèches de progression.</p>
+          <div id="historiqueZone"><p class="aide">Aucune évaluation enregistrée pour l'instant.</p></div>
+        </div>
       </div>
 
       <div class="carte hidden" id="carteAppreciationGroupe">
@@ -564,7 +663,7 @@ var ABSENCE_SHORT = {
 var COMP_LABELS = {
   POC: "Production orale en continu",
   POI: "Production orale en interaction",
-  EE: "Expression \u00e9crite"
+  CE: "Compr\u00e9hension \u00e9crite"
 };
 
 var state = {
@@ -782,6 +881,18 @@ function round1(n){
   return Math.round(n * 10) / 10;
 }
 
+function fmtNum(n){
+  return String(round1(n)).replace(".", ",");
+}
+
+function parseNumberLoose(raw){
+  var t = (raw + "").replace(/^\s+|\s+$/g,"").replace(",", ".");
+  if(t === ""){ return null; }
+  var v = parseFloat(t);
+  if(isNaN(v)){ return null; }
+  return v;
+}
+
 function arrowSymbol(delta){
   if(delta > 0.001){ return { symb: TXT.arrowUp, cls:"fleche-up" }; }
   if(delta < -0.001){ return { symb: TXT.arrowDown, cls:"fleche-down" }; }
@@ -801,8 +912,23 @@ function checkAuth(){
 }
 
 /* ---------- DEMARRAGE ---------- */
+function isLocalStorageWorking(){
+  try{
+    var testKey = "oralEvalTest_" + Date.now();
+    window.localStorage.setItem(testKey, "1");
+    var lu = window.localStorage.getItem(testKey);
+    window.localStorage.removeItem(testKey);
+    return lu === "1";
+  }catch(e){
+    return false;
+  }
+}
+
 function startApp(){
   state.db = loadDB();
+  if(!isLocalStorageWorking()){
+    document.getElementById("storageWarning").classList.remove("hidden");
+  }
   renderClassList();
 }
 
@@ -1121,15 +1247,23 @@ function createSession(){
   if(!state.currentClass){ return; }
   var titre = document.getElementById("nouvelleSessionTitre").value.replace(/^\s+|\s+$/g,"");
   var comp = document.getElementById("nouvelleSessionCompetence").value;
-  var modeRadios = document.getElementsByName("nouvelleSessionMode");
+  var isCE = (comp === "CE");
   var mode = "individuel";
-  for(var r=0; r<modeRadios.length; r++){
-    if(modeRadios[r].checked){ mode = modeRadios[r].value; break; }
+  if(!isCE){
+    var modeRadios = document.getElementsByName("nouvelleSessionMode");
+    for(var r=0; r<modeRadios.length; r++){
+      if(modeRadios[r].checked){ mode = modeRadios[r].value; break; }
+    }
   }
   if(titre === ""){ alert("Merci de donner un titre a cette evaluation."); return; }
   var cls = state.db.classes[state.currentClass];
   var template = cls.templates[comp];
-  var criteria = (template && template.length > 0) ? JSON.parse(JSON.stringify(template)) : [{ name:"", max:5, group:"oral" }];
+  var criteria;
+  if(isCE){
+    criteria = (template && template.length > 0) ? JSON.parse(JSON.stringify(template)) : [{ name:"" }];
+  }else{
+    criteria = (template && template.length > 0) ? JSON.parse(JSON.stringify(template)) : [{ name:"", max:5, group:"oral" }];
+  }
   var session = {
     id: genId(),
     title: titre,
@@ -1140,9 +1274,21 @@ function createSession(){
     records: {},
     groups: []
   };
+  if(isCE){
+    var echelleRadios = document.getElementsByName("nouvelleSessionEchelle");
+    var echelle = "20";
+    for(var e=0; e<echelleRadios.length; e++){
+      if(echelleRadios[e].checked){ echelle = echelleRadios[e].value; break; }
+    }
+    session.echelle = echelle;
+    session.totalMax = parseNumberLoose(document.getElementById("nouvelleSessionTotalMax").value);
+    session.grilleFiles = [];
+    session.corrigeFiles = [];
+  }
   cls.sessions.push(session);
   saveDB();
   document.getElementById("nouvelleSessionTitre").value = "";
+  document.getElementById("nouvelleSessionTotalMax").value = "";
   renderSessionsList();
   openSession(session.id);
 }
@@ -1164,20 +1310,45 @@ function openSession(id){
   state.currentSessionId = id;
   state.currentGroupId = null;
   state.currentCriteria = session.criteria;
+  var isCE = (session.competence === "CE");
   document.getElementById("view-setup").classList.add("hidden");
   document.getElementById("view-eval").classList.remove("hidden");
   document.getElementById("fab").classList.remove("hidden");
   document.getElementById("evalSessionTitre").value = session.title;
   document.getElementById("evalSessionCompetenceLabel").textContent = COMP_LABELS[session.competence];
+  document.getElementById("evalSessionModeLabel").classList.toggle("hidden", isCE);
   document.getElementById("evalSessionModeLabel").textContent = (session.mode === "groupe") ? "Travail de groupe" : "Travail individuel";
-  document.getElementById("carteGroupes").classList.toggle("hidden", session.mode !== "groupe");
+
+  document.getElementById("carteGroupes").classList.toggle("hidden", isCE || session.mode !== "groupe");
   document.getElementById("carteGroupeActif").classList.add("hidden");
   document.getElementById("carteAppreciationGroupe").classList.add("hidden");
-  document.getElementById("appreciationIndividuelleZone").classList.toggle("hidden", session.mode === "groupe");
   document.getElementById("editeurGroupe").classList.add("hidden");
   document.getElementById("panelEleves").classList.add("hidden");
+
+  document.getElementById("carteCEParams").classList.toggle("hidden", !isCE);
+  document.getElementById("carteCEPieces").classList.toggle("hidden", !isCE);
+  document.getElementById("blocOralTop").classList.toggle("hidden", isCE);
+  document.getElementById("blocCETop").classList.toggle("hidden", !isCE);
+  document.getElementById("blocOralChamps1").classList.toggle("hidden", isCE);
+  document.getElementById("blocCEChamps").classList.toggle("hidden", !isCE);
+  document.getElementById("blocOralChamps2").classList.toggle("hidden", isCE);
+  document.getElementById("blocProgression").classList.toggle("hidden", isCE);
+  document.getElementById("appreciationIndividuelleZone").classList.toggle("hidden", !isCE && session.mode === "groupe");
+  document.getElementById("titreCarteBareme").textContent = isCE ? "Grille (critères)" : "Barème (critères et points)";
+  document.getElementById("aideCarteBareme").textContent = isCE ? "Les critères sont ceux de votre grille. Vous saisissez un point uniquement là où c'est nécessaire ; le total reste manuel." : "Le barème est mémorisé pour cette classe et cette compétence et réutilisé pour vos prochaines évaluations.";
+
+  if(isCE){
+    document.getElementById("ceTotalMaxInput").value = (session.totalMax === null || session.totalMax === undefined) ? "" : session.totalMax;
+    var echRadios = document.getElementsByName("ceEchelle");
+    for(var i=0; i<echRadios.length; i++){ echRadios[i].checked = (echRadios[i].value === (session.echelle || "20")); }
+    if(!session.grilleFiles){ session.grilleFiles = []; }
+    if(!session.corrigeFiles){ session.corrigeFiles = []; }
+    renderPieceThumbs("grille");
+    renderPieceThumbs("corrige");
+  }
+
   renderCriteriaEditor();
-  if(session.mode === "groupe"){ renderGroupesList(); }
+  if(!isCE && session.mode === "groupe"){ renderGroupesList(); }
   renderStudentSelectorForSession();
   window.scrollTo(0,0);
 }
@@ -1460,9 +1631,20 @@ function openSessionAndSelectStudent(sessionId, studentName){
 /* ---------- BAREME / CRITERES ---------- */
 function renderCriteriaEditor(){
   var zone = document.getElementById("criteresEditeur");
+  var session = findSession(state.currentSessionId);
+  var isCE = !!(session && session.competence === "CE");
   var html = "";
   for(var i=0; i<state.currentCriteria.length; i++){
     var c = state.currentCriteria[i];
+    if(isCE){
+      html += "<div class=\"critere-bloc\">";
+      html += "<div class=\"critere-ligne\">";
+      html += "<input type=\"text\" data-idx=\"" + i + "\" class=\"critNom\" placeholder=\"Nom du critere de la grille\" value=\"" + escapeHtml(c.name) + "\">";
+      html += "<button class=\"sup\" data-idx=\"" + i + "\">✕</button>";
+      html += "</div>";
+      html += "</div>";
+      continue;
+    }
     var grp = (c.group === "prep") ? "prep" : "oral";
     html += "<div class=\"critere-bloc\">";
     html += "<div class=\"critere-ligne\">";
@@ -1512,16 +1694,27 @@ function renderCriteriaEditor(){
 }
 
 function addCriterionRow(){
-  state.currentCriteria.push({ name:"", max:5, group:"oral" });
+  var session = findSession(state.currentSessionId);
+  if(session && session.competence === "CE"){
+    state.currentCriteria.push({ name:"" });
+  }else{
+    state.currentCriteria.push({ name:"", max:5, group:"oral" });
+  }
   renderCriteriaEditor();
 }
 
 function validateBareme(){
+  var session = findSession(state.currentSessionId);
+  var isCE = !!(session && session.competence === "CE");
   var valides = [];
   var aUnCritereOral = false;
   for(var i=0; i<state.currentCriteria.length; i++){
     var c = state.currentCriteria[i];
     if(c.name.replace(/^\s+|\s+$/g,"") !== ""){
+      if(isCE){
+        valides.push({ name:c.name });
+        continue;
+      }
       var grp = (c.group === "prep") ? "prep" : "oral";
       if(grp === "oral"){ aUnCritereOral = true; }
       valides.push({ name:c.name, max: c.max || 0, group: grp });
@@ -1531,12 +1724,11 @@ function validateBareme(){
     alert("Ajoutez au moins un critere nomme avant de valider.");
     return;
   }
-  if(!aUnCritereOral){
+  if(!isCE && !aUnCritereOral){
     var continuer = confirm("Aucun critere n'est classe en Prestation orale : le suivi de progression restera vide pour cette evaluation. Continuer quand meme ?");
     if(!continuer){ return; }
   }
   state.currentCriteria = valides;
-  var session = findSession(state.currentSessionId);
   var cls = state.db.classes[state.currentClass];
   if(session){
     session.criteria = valides;
@@ -1582,19 +1774,28 @@ function onStudentChange(){
   state.currentStudent = document.getElementById("eleveSelect").value;
   var session = findSession(state.currentSessionId);
   var rec = (session && state.currentStudent && session.records[state.currentStudent]) ? session.records[state.currentStudent] : null;
+  var isCE = !!(session && session.competence === "CE");
   document.getElementById("evalStudentDate").value = rec && rec.date ? rec.date : todayISO();
   state.currentAbsenceStatus = rec && rec.absenceStatus ? rec.absenceStatus : null;
-  renderScoreInputs(rec);
-  document.getElementById("pointAnglaisInput").value = rec ? (rec.pointAnglais || "") : "";
-  document.getElementById("prononciationInput").value = rec ? (rec.prononciation || "") : "";
 
-  if(!(session && session.mode === "groupe")){
+  if(isCE){
+    renderCECriteriaZone(rec);
+    document.getElementById("ceTotalInput").value = (rec && rec.ceTotal !== undefined && rec.ceTotal !== null) ? rec.ceTotal : "";
+    updateCEEquivalent();
     document.getElementById("appreciationInput").value = rec ? (rec.appreciation || "") : "";
+    document.getElementById("erreursAnglaisInput").value = rec ? (rec.erreursAnglais || "") : "";
+  }else{
+    renderScoreInputs(rec);
+    document.getElementById("pointAnglaisInput").value = rec ? (rec.pointAnglais || "") : "";
+    document.getElementById("prononciationInput").value = rec ? (rec.prononciation || "") : "";
+    if(!(session && session.mode === "groupe")){
+      document.getElementById("appreciationInput").value = rec ? (rec.appreciation || "") : "";
+    }
+    document.getElementById("conseilsInput").value = rec ? (rec.conseils || "") : "";
+    document.getElementById("recommandationsInput").value = rec ? (rec.recommandations || "") : "";
+    renderHistorique();
   }
 
-  document.getElementById("conseilsInput").value = rec ? (rec.conseils || "") : "";
-  document.getElementById("recommandationsInput").value = rec ? (rec.recommandations || "") : "";
-  renderHistorique();
   if(!document.getElementById("panelEleves").classList.contains("hidden")){
     renderElevesPanel();
   }
@@ -1645,6 +1846,122 @@ function buildScoreRowsHtml(indexList, existingRecord){
     html += "<p class=\"aide\">Aucun critere dans ce groupe.</p>";
   }
   return html;
+}
+
+/* ---------- COMPREHENSION ECRITE ---------- */
+function renderCECriteriaZone(existingRecord){
+  var zone = document.getElementById("ceCriteriaZone");
+  var html = "";
+  for(var i=0; i<state.currentCriteria.length; i++){
+    var c = state.currentCriteria[i];
+    var valeur = "";
+    if(existingRecord && existingRecord.ceCriteriaScores){
+      for(var k=0; k<existingRecord.ceCriteriaScores.length; k++){
+        if(existingRecord.ceCriteriaScores[k].name === c.name){ valeur = existingRecord.ceCriteriaScores[k].score; break; }
+      }
+    }
+    html += "<div class=\"score-ligne\">";
+    html += "<div class=\"nom\">" + escapeHtml(c.name) + "</div>";
+    html += "<input type=\"text\" class=\"ceCritInput\" data-nom=\"" + escapeHtml(c.name) + "\" placeholder=\"points\" value=\"" + escapeHtml(valeur) + "\">";
+    html += "</div>";
+  }
+  if(state.currentCriteria.length === 0){
+    html = "<p class=\"aide\">Aucun critere dans la grille pour l'instant. Ajoutez-les dans la carte ci-dessus.</p>";
+  }
+  zone.innerHTML = html;
+}
+
+function collectCECriteriaScores(){
+  var inputs = document.querySelectorAll(".ceCritInput");
+  var scores = [];
+  for(var i=0; i<inputs.length; i++){
+    var v = inputs[i].value.replace(/^\s+|\s+$/g,"");
+    scores.push({ name: inputs[i].getAttribute("data-nom"), score: v });
+  }
+  return scores;
+}
+
+function updateCEEquivalent(){
+  var session = findSession(state.currentSessionId);
+  if(!session){ return; }
+  var raw = document.getElementById("ceTotalInput").value;
+  var box = document.getElementById("ceEquivBox");
+  var t = raw.replace(/^\s+|\s+$/g,"");
+  if(t.toUpperCase() === "ABS"){
+    box.innerHTML = "ABS<span>\u00c9quivalent</span>";
+    document.getElementById("absenceStatusZone").classList.remove("hidden");
+    refreshAbsenceButtonsUI();
+    return;
+  }
+  document.getElementById("absenceStatusZone").classList.add("hidden");
+  state.currentAbsenceStatus = null;
+  var v = parseNumberLoose(raw);
+  var max = session.totalMax;
+  if(v === null || !max || max <= 0){
+    box.innerHTML = "\u2014<span>\u00c9quivalent</span>";
+    return;
+  }
+  var echelle = session.echelle === "10" ? 10 : 20;
+  var equiv = (v / max) * echelle;
+  box.innerHTML = fmtNum(equiv) + " / " + echelle + "<span>\u00c9quivalent (" + fmtNum(v) + " / " + fmtNum(max) + ")</span>";
+}
+
+function readFileAsDataUrl(file, cb){
+  var reader = new FileReader();
+  reader.onload = function(){ cb(reader.result); };
+  reader.onerror = function(){ cb(null); };
+  reader.readAsDataURL(file);
+}
+
+function ajouterPieces(type, fileList){
+  var session = findSession(state.currentSessionId);
+  if(!session){ return; }
+  var arr = (type === "grille") ? session.grilleFiles : session.corrigeFiles;
+  var restant = fileList.length;
+  if(restant === 0){ return; }
+  for(var i=0; i<fileList.length; i++){
+    (function(f){
+      readFileAsDataUrl(f, function(dataUrl){
+        if(dataUrl){ arr.push({ name: f.name, dataUrl: dataUrl }); }
+        restant--;
+        if(restant === 0){
+          saveDB();
+          renderPieceThumbs(type);
+        }
+      });
+    })(fileList[i]);
+  }
+}
+
+function supprimerPieces(type){
+  var session = findSession(state.currentSessionId);
+  if(!session){ return; }
+  var ok = confirm("Supprimer toutes les pieces jointes de cette categorie pour cette evaluation ?");
+  if(!ok){ return; }
+  if(type === "grille"){ session.grilleFiles = []; }else{ session.corrigeFiles = []; }
+  saveDB();
+  renderPieceThumbs(type);
+}
+
+function renderPieceThumbs(type){
+  var session = findSession(state.currentSessionId);
+  if(!session){ return; }
+  var arr = (type === "grille") ? session.grilleFiles : session.corrigeFiles;
+  var infoZone = document.getElementById(type === "grille" ? "pieceInfoGrille" : "pieceInfoCorrige");
+  var thumbZone = document.getElementById(type === "grille" ? "pieceThumbsGrille" : "pieceThumbsCorrige");
+  if(!arr || arr.length === 0){
+    infoZone.textContent = "Aucune piece jointe.";
+    thumbZone.innerHTML = "";
+    return;
+  }
+  infoZone.textContent = arr.length + " page(s) jointe(s).";
+  var html = "";
+  for(var i=0; i<arr.length; i++){
+    if(arr[i].dataUrl && arr[i].dataUrl.indexOf("image") >= 0){
+      html += "<img src=\"" + arr[i].dataUrl + "\" alt=\"" + escapeHtml(arr[i].name) + "\">";
+    }
+  }
+  thumbZone.innerHTML = html;
 }
 
 function normalizeScoreValue(raw){
@@ -1788,30 +2105,48 @@ function saveEvaluation(advanceToNext){
   if(!state.currentStudent){ alert("Selectionnez un eleve."); return; }
   var session = findSession(state.currentSessionId);
   if(!session){ return; }
-  var isGroupMode = (session.mode === "groupe");
-  var data = collectCurrentScores();
+  var isCE = (session.competence === "CE");
   var dateVal = document.getElementById("evalStudentDate").value;
   if(dateVal === ""){ dateVal = todayISO(); }
-  var record = {
-    date: dateVal,
-    criteria: data.criteria,
-    total: data.total,
-    maxTotal: data.maxTotal,
-    prepTotal: data.prepTotal,
-    prepMaxTotal: data.prepMaxTotal,
-    oralTotal: data.oralTotal,
-    oralMaxTotal: data.oralMaxTotal,
-    absenceStatus: state.currentAbsenceStatus,
-    pointAnglais: document.getElementById("pointAnglaisInput").value,
-    prononciation: document.getElementById("prononciationInput").value,
-    appreciation: isGroupMode ? "" : document.getElementById("appreciationInput").value,
-    conseils: document.getElementById("conseilsInput").value,
-    recommandations: document.getElementById("recommandationsInput").value,
-    savedAt: new Date().toISOString()
-  };
+  var record;
+
+  if(isCE){
+    var totalRaw = document.getElementById("ceTotalInput").value.replace(/^\s+|\s+$/g,"");
+    var isAbs = (totalRaw.toUpperCase() === "ABS");
+    record = {
+      date: dateVal,
+      ceCriteriaScores: collectCECriteriaScores(),
+      ceTotal: isAbs ? "ABS" : totalRaw,
+      absenceStatus: isAbs ? state.currentAbsenceStatus : null,
+      appreciation: document.getElementById("appreciationInput").value,
+      erreursAnglais: document.getElementById("erreursAnglaisInput").value,
+      savedAt: new Date().toISOString()
+    };
+  }else{
+    var isGroupMode = (session.mode === "groupe");
+    var data = collectCurrentScores();
+    record = {
+      date: dateVal,
+      criteria: data.criteria,
+      total: data.total,
+      maxTotal: data.maxTotal,
+      prepTotal: data.prepTotal,
+      prepMaxTotal: data.prepMaxTotal,
+      oralTotal: data.oralTotal,
+      oralMaxTotal: data.oralMaxTotal,
+      absenceStatus: state.currentAbsenceStatus,
+      pointAnglais: document.getElementById("pointAnglaisInput").value,
+      prononciation: document.getElementById("prononciationInput").value,
+      appreciation: isGroupMode ? "" : document.getElementById("appreciationInput").value,
+      conseils: document.getElementById("conseilsInput").value,
+      recommandations: document.getElementById("recommandationsInput").value,
+      savedAt: new Date().toISOString()
+    };
+  }
+
   session.records[state.currentStudent] = record;
   saveDB();
-  renderHistorique();
+  if(!isCE){ renderHistorique(); }
   renderSessionsList();
   if(!document.getElementById("panelEleves").classList.contains("hidden")){
     renderElevesPanel();
@@ -1858,6 +2193,10 @@ function renderElevesPanel(){
     var rec = session.records[nom];
     var statut, classeStatut;
     if(!rec){ statut = TXT.aEvaluer; classeStatut = "statut-attente"; }
+    else if(session.competence === "CE"){
+      if(rec.ceTotal === "ABS"){ statut = rec.absenceStatus ? ("ABS \u2022 " + ABSENCE_SHORT[rec.absenceStatus]) : "ABS"; classeStatut = "statut-abs"; }
+      else{ statut = (rec.ceTotal === "" || rec.ceTotal === undefined) ? "\u2014" : rec.ceTotal; classeStatut = "statut-fait"; }
+    }
     else if(rec.total === "ABS"){ statut = rec.absenceStatus ? ("ABS \u2022 " + ABSENCE_SHORT[rec.absenceStatus]) : "ABS"; classeStatut = "statut-abs"; }
     else{ statut = rec.total + "/" + rec.maxTotal; classeStatut = "statut-fait"; }
     var actif = (nom === state.currentStudent) ? " actif" : "";
@@ -1977,6 +2316,48 @@ function buildStudentPageHTML(studentName, sessionId){
 
   html += "<div class=\"bloc\"><b>Date de passage</b>" + formatDateOnly(rec.date) + "</div>";
 
+  if(code === "CE"){
+    if(rec.ceCriteriaScores && rec.ceCriteriaScores.length > 0){
+      html += "<table><tr><th>Critere</th><th>Points</th></tr>";
+      for(var cj=0; cj<rec.ceCriteriaScores.length; cj++){
+        html += "<tr><td>" + escapeHtml(rec.ceCriteriaScores[cj].name) + "</td><td>" + escapeHtml(rec.ceCriteriaScores[cj].score) + "</td></tr>";
+      }
+      html += "</table>";
+    }
+
+    if(rec.ceTotal === "ABS"){
+      html += "<div class=\"noteFinale\">ABS</div>";
+      if(rec.absenceStatus){
+        html += "<div class=\"bloc\"><b>Statut de l'absence</b>" + ABSENCE_LABELS[rec.absenceStatus] + "</div>";
+      }
+    }else{
+      var maxN = session.totalMax;
+      var vN = parseNumberLoose(rec.ceTotal);
+      var echelle = session.echelle === "10" ? 10 : 20;
+      html += "<div class=\"bloc\"><b>Total</b>" + escapeHtml(rec.ceTotal) + (maxN ? (" / " + fmtNum(maxN)) : "") + "</div>";
+      if(vN !== null && maxN && maxN > 0){
+        html += "<div class=\"noteFinale\">" + fmtNum((vN / maxN) * echelle) + " / " + echelle + "</div>";
+      }else{
+        html += "<div class=\"noteFinale\">\u2014</div>";
+      }
+    }
+
+    html += "<div class=\"bloc\"><b>" + TXT.Appreciation + " " + TXT.generale + "</b>" + nl2br(rec.appreciation) + "</div>";
+    html += "<div class=\"bloc\"><b>Erreurs d'anglais \u00e0 revoir</b>" + nl2br(rec.erreursAnglais) + "</div>";
+    html += "</div>";
+
+    var piecesArr = (session.grilleFiles || []).concat(session.corrigeFiles || []);
+    var legendes = [];
+    for(var lg=0; lg<(session.grilleFiles || []).length; lg++){ legendes.push("Grille d'\u00e9valuation \u2014 " + escapeHtml(studentName)); }
+    for(var lc=0; lc<(session.corrigeFiles || []).length; lc++){ legendes.push("Corrig\u00e9 \u2014 " + escapeHtml(studentName)); }
+    for(var pi=0; pi<piecesArr.length; pi++){
+      if(piecesArr[pi].dataUrl && piecesArr[pi].dataUrl.indexOf("image") >= 0){
+        html += "<div class=\"page pageAttach\"><p class=\"legendePiece\">" + legendes[pi] + "</p><img src=\"" + piecesArr[pi].dataUrl + "\" alt=\"\"></div>";
+      }
+    }
+    return html;
+  }
+
   var groupInfo = (session.mode === "groupe") ? findGroupForStudent(session, studentName) : null;
 
   var critPrep = [];
@@ -2085,6 +2466,7 @@ function buildStudentPageHTML(studentName, sessionId){
 
   html += "<div class=\"bloc\"><b>" + TXT.pointAnglais + "</b>" + nl2br(rec.pointAnglais) + "</div>";
   html += "<div class=\"bloc\"><b>Prononciation \u00e0 revoir</b>" + nl2br(rec.prononciation) + "</div>";
+  html += "<div class=\"bloc\"><a href=\"https://www.deepl.com/translator\" style=\"color:#1d5fa8;\">\uD83D\uDD0A \u00c9couter la prononciation sur DeepL</a></div>";
   html += "<div class=\"bloc\"><b>" + TXT.Appreciation + " " + TXT.generale + "</b>" + nl2br(groupInfo ? groupInfo.appreciation : rec.appreciation) + "</div>";
   html += "<div class=\"bloc\"><b>Conseils</b>" + nl2br(rec.conseils) + "</div>";
   html += "<div class=\"bloc\"><b>Recommandations de travail</b>" + nl2br(rec.recommandations) + "</div>";
@@ -2131,6 +2513,11 @@ document.addEventListener("DOMContentLoaded", function(){
   });
   document.getElementById("btnChangerClasse").addEventListener("click", changerDeClasse);
   document.getElementById("btnCreerSession").addEventListener("click", createSession);
+  document.getElementById("nouvelleSessionCompetence").addEventListener("change", function(){
+    var isCE = (document.getElementById("nouvelleSessionCompetence").value === "CE");
+    document.getElementById("blocModeTravail").classList.toggle("hidden", isCE);
+    document.getElementById("blocCECreation").classList.toggle("hidden", !isCE);
+  });
 
   document.getElementById("evalSessionTitre").addEventListener("change", function(){
     var session = findSession(state.currentSessionId);
@@ -2174,6 +2561,42 @@ document.addEventListener("DOMContentLoaded", function(){
   }
   document.getElementById("btnEnregistrerEval").addEventListener("click", function(){ saveEvaluation(false); });
   document.getElementById("btnEleveSuivant").addEventListener("click", function(){ saveEvaluation(true); });
+
+  document.getElementById("ceTotalInput").addEventListener("input", updateCEEquivalent);
+  document.getElementById("ceTotalMaxInput").addEventListener("change", function(){
+    var session = findSession(state.currentSessionId);
+    if(session){
+      session.totalMax = parseNumberLoose(document.getElementById("ceTotalMaxInput").value);
+      saveDB();
+      updateCEEquivalent();
+    }
+  });
+  var echelleRadiosLive = document.getElementsByName("ceEchelle");
+  for(var eq=0; eq<echelleRadiosLive.length; eq++){
+    echelleRadiosLive[eq].addEventListener("change", function(){
+      var session = findSession(state.currentSessionId);
+      if(session){
+        var checked = document.querySelector("input[name=ceEchelle]:checked");
+        session.echelle = checked ? checked.value : "20";
+        saveDB();
+        updateCEEquivalent();
+      }
+    });
+  }
+
+  document.getElementById("btnAjouterGrille").addEventListener("click", function(){ document.getElementById("fileInputGrille").click(); });
+  document.getElementById("fileInputGrille").addEventListener("change", function(ev){
+    ajouterPieces("grille", ev.currentTarget.files);
+    ev.currentTarget.value = "";
+  });
+  document.getElementById("btnSupprimerGrille").addEventListener("click", function(){ supprimerPieces("grille"); });
+
+  document.getElementById("btnAjouterCorrige").addEventListener("click", function(){ document.getElementById("fileInputCorrige").click(); });
+  document.getElementById("fileInputCorrige").addEventListener("change", function(ev){
+    ajouterPieces("corrige", ev.currentTarget.files);
+    ev.currentTarget.value = "";
+  });
+  document.getElementById("btnSupprimerCorrige").addEventListener("click", function(){ supprimerPieces("corrige"); });
 
   document.getElementById("fabBtn").addEventListener("click", toggleFabMenu);
   document.getElementById("fabPdfEleve").addEventListener("click", printSingleStudent);
