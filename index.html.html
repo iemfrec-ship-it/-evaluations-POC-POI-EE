@@ -148,6 +148,19 @@
 
   .lien-outil{display:inline-block; margin:4px 0 12px 0; font-size:12px; color:var(--bleu); text-decoration:underline;}
 
+  .grille-membres{display:flex; gap:10px; overflow-x:auto; padding-bottom:10px; -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity;}
+  .carte-membre{flex:0 0 250px; scroll-snap-align:start; border:1px solid var(--bordure); border-radius:12px; padding:10px; background:#fbfcfe;}
+  .carte-membre h4{margin:0 0 8px 0; font-size:14px; color:var(--bleu-fonce);}
+  .carte-membre label{font-size:11px; margin:8px 0 3px; display:block; font-weight:600; color:var(--gris);}
+  .carte-membre textarea{min-height:46px; font-size:13px; padding:7px;}
+  .carte-membre input[type=date]{font-size:13px; padding:7px; margin-bottom:4px;}
+  .carte-membre .score-ligne{padding:4px 0; border-bottom:none;}
+  .carte-membre .score-ligne .nom{font-size:12px;}
+  .carte-membre .score-ligne .nom small{display:none;}
+  .carte-membre .score-ligne input{width:64px; padding:6px;}
+  .btnDetailMembre{font-size:11px; color:var(--bleu); background:none; border:none; text-decoration:underline; padding:6px 0 0 0; display:block;}
+  .carte-membre .btnMarquerAbsentGrille{margin:8px 0;}
+
   #absenceStatusZone{background:#fff8f0; border:1px solid #f3d9b1; border-radius:10px; padding:10px;}
   .btn-abs-status{
     background:#fff; border:1.5px solid var(--bordure); padding:10px 8px; font-size:13px; font-weight:600;
@@ -455,6 +468,15 @@ Nom Prénom
         <div id="groupeActifPrepZone"></div>
         <div class="total-box hidden" id="groupeActifTotalBox">0/0<span>Sous-total travail préparatoire</span></div>
         <button class="btn btn-bleu btn-large" id="btnSauverPrepGroupeActif" style="margin-top:10px;">Enregistrer le travail préparatoire du groupe</button>
+        <hr class="separateur">
+        <button class="btn btn-gris btn-large" id="btnToggleVueGrille">🔲 Vue simultanée (3-4 élèves côte à côte)</button>
+      </div>
+
+      <div class="carte hidden" id="carteVueGrille">
+        <h2>Saisie simultanée du groupe</h2>
+        <p class="aide">Notez plusieurs élèves côte à côte pour gagner du temps. L'appréciation générale et le travail préparatoire restent communs au groupe (cartes ci-dessus).</p>
+        <div id="grilleMembresZone" class="grille-membres"></div>
+        <button class="btn btn-vert btn-large" id="btnSauverGrilleMembres" style="margin-top:12px;">💾 Enregistrer tous les élèves affichés</button>
       </div>
 
       <p class="aide hidden" id="messageChoisirGroupe">Sélectionnez ou créez un groupe ci-dessus, puis cliquez sur « Évaluer » pour commencer la saisie.</p>
@@ -471,6 +493,7 @@ Nom Prénom
         <input type="date" id="evalStudentDate">
 
         <div id="blocOralTop">
+          <button type="button" class="btn btn-rouge btn-large" id="btnMarquerAbsentOral">📵 Marquer l'élève absent(e)</button>
           <div id="scoresZone" style="margin-top:14px;"></div>
           <p class="aide">Saisissez une note pour chaque critère, ou tapez ABS si l'élève était absent sur ce critère.</p>
 
@@ -489,6 +512,7 @@ Nom Prénom
         </div>
 
         <div id="blocCETop" class="hidden">
+          <button type="button" class="btn btn-rouge btn-large" id="btnMarquerAbsentCE">📵 Marquer l'élève absent(e)</button>
           <div id="ceCriteriaZone" style="margin-top:14px;"></div>
           <p class="aide">Saisissez des points seulement là où c'est nécessaire : les cases laissées vides sont ignorées.</p>
           <label>Total de points obtenu (à indiquer, ou ABS si absent)</label>
@@ -1309,6 +1333,7 @@ function openSession(id){
   if(!session){ return; }
   state.currentSessionId = id;
   state.currentGroupId = null;
+  document.getElementById("carteVueGrille").classList.add("hidden");
   state.currentCriteria = session.criteria;
   var isCE = (session.competence === "CE");
   document.getElementById("view-setup").classList.add("hidden");
@@ -1382,10 +1407,18 @@ function renderGroupesList(){
   for(var i=0; i<session.groups.length; i++){
     var g = session.groups[i];
     var actif = (g.id === state.currentGroupId);
+    var nbEvalues = 0;
+    for(var mi=0; mi<g.members.length; mi++){
+      if(session.records[g.members[mi]]){ nbEvalues++; }
+    }
+    var badgeTxt, badgeClasse;
+    if(nbEvalues === 0){ badgeTxt = TXT.aEvaluer; badgeClasse = "statut-attente"; }
+    else if(nbEvalues < g.members.length){ badgeTxt = "En cours \u2022 " + nbEvalues + "/" + g.members.length; badgeClasse = "statut-attente"; }
+    else{ badgeTxt = "\u00c9valu\u00e9 \u2022 " + nbEvalues + "/" + g.members.length; badgeClasse = "statut-fait"; }
     html += "<div class=\"session-ligne" + (actif ? " hist-actuelle" : "") + "\">";
     html += "<div class=\"session-info\">";
     html += "<div class=\"session-titre\">" + escapeHtml(g.members.join(", ")) + "</div>";
-    html += "<div class=\"session-meta\">" + g.members.length + " " + TXT.eleves + "</div>";
+    html += "<div class=\"session-meta\">" + g.members.length + " " + TXT.eleves + " &nbsp;&bull;&nbsp; <span class=\"statut " + badgeClasse + "\">" + badgeTxt + "</span></div>";
     html += "</div>";
     html += "<button class=\"btnEvaluerGroupe\" data-id=\"" + g.id + "\">Évaluer</button>";
     html += "<button class=\"btnOuvrirSession\" data-id=\"" + g.id + "\">Composition</button>";
@@ -1509,6 +1542,8 @@ function activerGroupePourEvaluation(groupId){
   var g = findGroupById(session, groupId);
   if(!g){ return; }
   state.currentGroupId = groupId;
+  document.getElementById("carteVueGrille").classList.add("hidden");
+  document.getElementById("carteEvalEleve").classList.remove("hidden");
   document.getElementById("editeurGroupe").classList.add("hidden");
   document.getElementById("carteGroupeActif").classList.remove("hidden");
   document.getElementById("groupeActifTitre").textContent = "Groupe : " + g.members.join(", ");
@@ -1523,6 +1558,7 @@ function activerGroupePourEvaluation(groupId){
 
 function quitterGroupeActif(){
   state.currentGroupId = null;
+  document.getElementById("carteVueGrille").classList.add("hidden");
   document.getElementById("carteGroupeActif").classList.add("hidden");
   document.getElementById("carteAppreciationGroupe").classList.add("hidden");
   renderGroupesList();
@@ -1613,6 +1649,137 @@ function sauvegarderAppreciationGroupe(){
   g.appreciation = document.getElementById("groupeAppreciationFinaleInput").value;
   saveDB();
   alert("Appreciation du groupe enregistree.");
+}
+
+/* ---------- VUE SIMULTANEE (plusieurs eleves du groupe cote a cote) ---------- */
+function toggleVueGrille(){
+  var estVisible = !document.getElementById("carteVueGrille").classList.contains("hidden");
+  if(estVisible){
+    document.getElementById("carteVueGrille").classList.add("hidden");
+    document.getElementById("carteEvalEleve").classList.remove("hidden");
+  }else{
+    document.getElementById("carteEvalEleve").classList.add("hidden");
+    document.getElementById("carteVueGrille").classList.remove("hidden");
+    renderGrilleMembres();
+  }
+}
+
+function getOralCriteria(session){
+  var liste = [];
+  for(var i=0; i<session.criteria.length; i++){
+    if(session.criteria[i].group !== "prep"){ liste.push(session.criteria[i]); }
+  }
+  return liste;
+}
+
+function renderGrilleMembres(){
+  var session = findSession(state.currentSessionId);
+  var g = (session && state.currentGroupId) ? findGroupById(session, state.currentGroupId) : null;
+  var zone = document.getElementById("grilleMembresZone");
+  if(!g || g.members.length === 0){
+    zone.innerHTML = "<p class=\"aide\">Aucun membre dans ce groupe.</p>";
+    return;
+  }
+  var oralCriteria = getOralCriteria(session);
+  var html = "";
+  for(var m=0; m<g.members.length; m++){
+    var nom = g.members[m];
+    var rec = session.records[nom];
+    html += "<div class=\"carte-membre\">";
+    html += "<h4>" + escapeHtml(nom) + "</h4>";
+    html += "<input type=\"date\" class=\"gDate\" data-idx=\"" + m + "\" value=\"" + (rec && rec.date ? rec.date : todayISO()) + "\">";
+    html += "<button type=\"button\" class=\"btn btn-rouge btnMarquerAbsentGrille\" data-idx=\"" + m + "\" style=\"width:100%; font-size:12px; padding:7px;\">📵 Absent(e)</button>";
+    for(var c=0; c<oralCriteria.length; c++){
+      var crit = oralCriteria[c];
+      var valeur = "";
+      if(rec && rec.criteria){
+        for(var k=0; k<rec.criteria.length; k++){
+          if(rec.criteria[k].name === crit.name){ valeur = rec.criteria[k].score; break; }
+        }
+      }
+      html += "<div class=\"score-ligne\"><div class=\"nom\">" + escapeHtml(crit.name) + "</div><input type=\"text\" class=\"gScore\" data-idx=\"" + m + "\" data-crit=\"" + escapeHtml(crit.name) + "\" data-max=\"" + crit.max + "\" placeholder=\"0-" + crit.max + " ou ABS\" value=\"" + escapeHtml(valeur) + "\"></div>";
+    }
+    html += "<label>Point d'anglais</label><textarea class=\"gPointAnglais\" data-idx=\"" + m + "\">" + escapeHtml(rec ? rec.pointAnglais : "") + "</textarea>";
+    html += "<label>Prononciation</label><textarea class=\"gPrononciation\" data-idx=\"" + m + "\">" + escapeHtml(rec ? rec.prononciation : "") + "</textarea>";
+    html += "<label>Conseils</label><textarea class=\"gConseils\" data-idx=\"" + m + "\">" + escapeHtml(rec ? rec.conseils : "") + "</textarea>";
+    html += "<label>Recommandations</label><textarea class=\"gRecommandations\" data-idx=\"" + m + "\">" + escapeHtml(rec ? rec.recommandations : "") + "</textarea>";
+    html += "<button type=\"button\" class=\"btnDetailMembre\" data-nom=\"" + escapeHtml(nom) + "\">Ouvrir en d\u00e9tail (absence, historique) \u2192</button>";
+    html += "</div>";
+  }
+  zone.innerHTML = html;
+  var detailBtns = zone.querySelectorAll(".btnDetailMembre");
+  for(var d=0; d<detailBtns.length; d++){
+    detailBtns[d].addEventListener("click", function(ev){
+      var nom = ev.currentTarget.getAttribute("data-nom");
+      document.getElementById("carteVueGrille").classList.add("hidden");
+      document.getElementById("carteEvalEleve").classList.remove("hidden");
+      document.getElementById("eleveSelect").value = nom;
+      onStudentChange();
+      window.scrollTo(0,0);
+    });
+  }
+  var absBtns = zone.querySelectorAll(".btnMarquerAbsentGrille");
+  for(var ab=0; ab<absBtns.length; ab++){
+    absBtns[ab].addEventListener("click", function(ev){
+      var idx = ev.currentTarget.getAttribute("data-idx");
+      var scoreInputs = zone.querySelectorAll(".gScore[data-idx=\"" + idx + "\"]");
+      for(var si=0; si<scoreInputs.length; si++){ scoreInputs[si].value = "ABS"; }
+    });
+  }
+}
+
+function sauvegarderGrilleMembres(){
+  var session = findSession(state.currentSessionId);
+  var g = (session && state.currentGroupId) ? findGroupById(session, state.currentGroupId) : null;
+  if(!g){ return; }
+  for(var m=0; m<g.members.length; m++){
+    var nom = g.members[m];
+    var dateInput = document.querySelector(".gDate[data-idx=\"" + m + "\"]");
+    var dateVal = (dateInput && dateInput.value) ? dateInput.value : todayISO();
+    var scoreInputs = document.querySelectorAll(".gScore[data-idx=\"" + m + "\"]");
+    var criteria = [];
+    var total = 0, maxc = 0, hasNum = false;
+    for(var s=0; s<scoreInputs.length; s++){
+      var critName = scoreInputs[s].getAttribute("data-crit");
+      var max = parseFloat(scoreInputs[s].getAttribute("data-max")) || 0;
+      var v = normalizeScoreValue(scoreInputs[s].value);
+      var scoreVal;
+      if(v === "ABS"){ scoreVal = "ABS"; }
+      else{ scoreVal = (v === "") ? 0 : v; hasNum = true; total += scoreVal; maxc += max; }
+      criteria.push({ name: critName, max: max, group:"oral", score: scoreVal });
+    }
+    var totalOut = hasNum ? round1(total) : (criteria.length > 0 ? "ABS" : null);
+    var maxOut = hasNum ? round1(maxc) : 0;
+    var existingRec = session.records[nom];
+    var pointAnglaisEl = document.querySelector(".gPointAnglais[data-idx=\"" + m + "\"]");
+    var prononciationEl = document.querySelector(".gPrononciation[data-idx=\"" + m + "\"]");
+    var conseilsEl = document.querySelector(".gConseils[data-idx=\"" + m + "\"]");
+    var recommandationsEl = document.querySelector(".gRecommandations[data-idx=\"" + m + "\"]");
+    var record = {
+      date: dateVal,
+      criteria: criteria,
+      total: totalOut,
+      maxTotal: maxOut,
+      prepTotal: null,
+      prepMaxTotal: 0,
+      oralTotal: totalOut,
+      oralMaxTotal: maxOut,
+      absenceStatus: existingRec ? existingRec.absenceStatus : null,
+      pointAnglais: pointAnglaisEl ? pointAnglaisEl.value : "",
+      prononciation: prononciationEl ? prononciationEl.value : "",
+      appreciation: "",
+      conseils: conseilsEl ? conseilsEl.value : "",
+      recommandations: recommandationsEl ? recommandationsEl.value : "",
+      savedAt: new Date().toISOString()
+    };
+    session.records[nom] = record;
+  }
+  saveDB();
+  renderGrilleMembres();
+  renderSessionsList();
+  renderGroupesList();
+  if(!document.getElementById("panelEleves").classList.contains("hidden")){ renderElevesPanel(); }
+  alert("Evaluations enregistrees pour " + g.members.length + " eleve(s) du groupe.");
 }
 
 function openSessionAndSelectStudent(sessionId, studentName){
@@ -1879,6 +2046,18 @@ function collectCECriteriaScores(){
     scores.push({ name: inputs[i].getAttribute("data-nom"), score: v });
   }
   return scores;
+}
+
+function marquerAbsentOral(){
+  var inputs = document.querySelectorAll(".scoreInput");
+  if(inputs.length === 0){ alert("Validez d'abord le bareme avant de marquer une absence."); return; }
+  for(var i=0; i<inputs.length; i++){ inputs[i].value = "ABS"; }
+  updateTotal();
+}
+
+function marquerAbsentCE(){
+  document.getElementById("ceTotalInput").value = "ABS";
+  updateCEEquivalent();
 }
 
 function updateCEEquivalent(){
@@ -2148,6 +2327,7 @@ function saveEvaluation(advanceToNext){
   saveDB();
   if(!isCE){ renderHistorique(); }
   renderSessionsList();
+  if(session.mode === "groupe"){ renderGroupesList(); }
   if(!document.getElementById("panelEleves").classList.contains("hidden")){
     renderElevesPanel();
   }
@@ -2537,6 +2717,8 @@ document.addEventListener("DOMContentLoaded", function(){
   document.getElementById("btnQuitterGroupeActif").addEventListener("click", quitterGroupeActif);
   document.getElementById("btnSauverPrepGroupeActif").addEventListener("click", sauvegarderPrepGroupeActif);
   document.getElementById("btnSauverAppreciationGroupe").addEventListener("click", sauvegarderAppreciationGroupe);
+  document.getElementById("btnToggleVueGrille").addEventListener("click", toggleVueGrille);
+  document.getElementById("btnSauverGrilleMembres").addEventListener("click", sauvegarderGrilleMembres);
 
   document.getElementById("eleveSelect").addEventListener("change", onStudentChange);
   document.getElementById("btnElevesPanel").addEventListener("click", toggleElevesPanel);
@@ -2562,6 +2744,8 @@ document.addEventListener("DOMContentLoaded", function(){
   document.getElementById("btnEnregistrerEval").addEventListener("click", function(){ saveEvaluation(false); });
   document.getElementById("btnEleveSuivant").addEventListener("click", function(){ saveEvaluation(true); });
 
+  document.getElementById("btnMarquerAbsentOral").addEventListener("click", marquerAbsentOral);
+  document.getElementById("btnMarquerAbsentCE").addEventListener("click", marquerAbsentCE);
   document.getElementById("ceTotalInput").addEventListener("input", updateCEEquivalent);
   document.getElementById("ceTotalMaxInput").addEventListener("change", function(){
     var session = findSession(state.currentSessionId);
