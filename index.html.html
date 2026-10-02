@@ -410,7 +410,7 @@ Nom Prénom
 
       <div class="carte hidden" id="carteCEPieces">
         <h2>Pièces jointes du PDF</h2>
-        <p class="aide">La grille d'évaluation et le corrigé sont ajoutés à la suite de la fiche de chaque élève dans le PDF. Prenez-les en photo ou en capture d'écran (format image uniquement, pour une impression fiable).</p>
+        <p class="aide">La grille d'évaluation et le corrigé sont ajoutés à la suite de la fiche de chaque élève dans le PDF. Photo, capture d'écran ou fichier PDF acceptés (l'import d'un PDF convertit chaque page en image et nécessite une connexion internet au moment de l'ajout).</p>
         <div class="piece-bloc">
           <div class="piece-titre">Grille d'évaluation</div>
           <div class="piece-info" id="pieceInfoGrille">Aucune pièce jointe.</div>
@@ -419,7 +419,7 @@ Nom Prénom
             <button class="btn btn-bleu" id="btnAjouterGrille">+ Ajouter</button>
             <button class="btn btn-rouge" id="btnSupprimerGrille" style="flex:none;">Tout supprimer</button>
           </div>
-          <input type="file" id="fileInputGrille" accept="image/*" multiple class="hidden">
+          <input type="file" id="fileInputGrille" accept="image/*,application/pdf" multiple class="hidden">
         </div>
         <div class="piece-bloc">
           <div class="piece-titre">Corrigé</div>
@@ -429,7 +429,7 @@ Nom Prénom
             <button class="btn btn-bleu" id="btnAjouterCorrige">+ Ajouter</button>
             <button class="btn btn-rouge" id="btnSupprimerCorrige" style="flex:none;">Tout supprimer</button>
           </div>
-          <input type="file" id="fileInputCorrige" accept="image/*" multiple class="hidden">
+          <input type="file" id="fileInputCorrige" accept="image/*,application/pdf" multiple class="hidden">
         </div>
       </div>
 
@@ -2092,23 +2092,111 @@ function readFileAsDataUrl(file, cb){
   reader.readAsDataURL(file);
 }
 
+var PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+var PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+var pdfJsChargement = null;
+
+function ensurePdfJsLoaded(onReady, onError){
+  if(window.pdfjsLib){ onReady(); return; }
+  if(pdfJsChargement){
+    pdfJsChargement.callbacks.push(onReady);
+    if(onError){ pdfJsChargement.errCallbacks.push(onError); }
+    return;
+  }
+  pdfJsChargement = { callbacks:[onReady], errCallbacks: onError ? [onError] : [] };
+  var script = document.createElement("script");
+  script.src = PDFJS_URL;
+  script.onload = function(){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+    var cbs = pdfJsChargement.callbacks;
+    pdfJsChargement = null;
+    for(var i=0; i<cbs.length; i++){ cbs[i](); }
+  };
+  script.onerror = function(){
+    var errs = pdfJsChargement ? pdfJsChargement.errCallbacks : [];
+    pdfJsChargement = null;
+    for(var j=0; j<errs.length; j++){ errs[j](); }
+  };
+  document.head.appendChild(script);
+}
+
+function convertirPdfEnImages(file, onDone, onError){
+  var reader = new FileReader();
+  reader.onload = function(){
+    var typedArray = new Uint8Array(reader.result);
+    window.pdfjsLib.getDocument({ data: typedArray }).promise.then(function(pdf){
+      var images = [];
+      function rendrePage(numero){
+        if(numero > pdf.numPages){ onDone(images); return; }
+        pdf.getPage(numero).then(function(page){
+          var viewport = page.getViewport({ scale: 2 });
+          var canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          var ctx = canvas.getContext("2d");
+          page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
+            images.push(canvas.toDataURL("image/png"));
+            rendrePage(numero + 1);
+          }).catch(onError);
+        }).catch(onError);
+      }
+      rendrePage(1);
+    }).catch(onError);
+  };
+  reader.onerror = function(){ onError(); };
+  reader.readAsArrayBuffer(file);
+}
+
 function ajouterPieces(type, fileList){
   var session = findSession(state.currentSessionId);
   if(!session){ return; }
   var arr = (type === "grille") ? session.grilleFiles : session.corrigeFiles;
-  var restant = fileList.length;
-  if(restant === 0){ return; }
-  for(var i=0; i<fileList.length; i++){
-    (function(f){
-      readFileAsDataUrl(f, function(dataUrl){
-        if(dataUrl){ arr.push({ name: f.name, dataUrl: dataUrl }); }
-        restant--;
-        if(restant === 0){
-          saveDB();
-          renderPieceThumbs(type);
+  var files = [];
+  for(var i=0; i<fileList.length; i++){ files.push(fileList[i]); }
+  if(files.length === 0){ return; }
+
+  var contientPdf = false;
+  for(var j=0; j<files.length; j++){
+    if(files[j].type === "application/pdf"){ contientPdf = true; break; }
+  }
+
+  function traiterTousLesFichiers(){
+    var restant = files.length;
+    var unFichierTermine = function(){
+      restant--;
+      if(restant === 0){
+        saveDB();
+        renderPieceThumbs(type);
+      }
+    };
+    for(var k=0; k<files.length; k++){
+      (function(f){
+        if(f.type === "application/pdf"){
+          convertirPdfEnImages(f, function(images){
+            for(var p=0; p<images.length; p++){
+              arr.push({ name: f.name + " (p." + (p+1) + ")", dataUrl: images[p] });
+            }
+            unFichierTermine();
+          }, function(){
+            alert("Impossible de convertir le PDF " + f.name + ". Reessayez avec une connexion internet, ou ajoutez une photo/capture a la place.");
+            unFichierTermine();
+          });
+        }else{
+          readFileAsDataUrl(f, function(dataUrl){
+            if(dataUrl){ arr.push({ name: f.name, dataUrl: dataUrl }); }
+            unFichierTermine();
+          });
         }
-      });
-    })(fileList[i]);
+      })(files[k]);
+    }
+  }
+
+  if(contientPdf){
+    ensurePdfJsLoaded(traiterTousLesFichiers, function(){
+      alert("Le convertisseur PDF n'a pas pu etre charge (connexion internet necessaire pour ajouter un fichier PDF). Vous pouvez ajouter une photo ou une capture d'ecran a la place.");
+    });
+  }else{
+    traiterTousLesFichiers();
   }
 }
 
