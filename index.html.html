@@ -552,24 +552,13 @@ Nom Prénom
 
         <div id="appreciationIndividuelleZone">
           <div class="cp-row">
-            <label>Appréciation générale</label>
+            <label id="labelAppreciation">Appréciation générale</label>
             <div class="cp-btns">
               <button type="button" class="btn-cp" data-target="appreciationInput" data-action="copy">📋 Copier</button>
               <button type="button" class="btn-cp" data-target="appreciationInput" data-action="paste">📥 Coller</button>
             </div>
           </div>
           <textarea id="appreciationInput" placeholder="Appréciation générale de la prestation..."></textarea>
-        </div>
-
-        <div id="blocCEChamps" class="hidden">
-          <div class="cp-row">
-            <label>Erreurs d'anglais à revoir</label>
-            <div class="cp-btns">
-              <button type="button" class="btn-cp" data-target="erreursAnglaisInput" data-action="copy">📋 Copier</button>
-              <button type="button" class="btn-cp" data-target="erreursAnglaisInput" data-action="paste">📥 Coller</button>
-            </div>
-          </div>
-          <textarea id="erreursAnglaisInput" placeholder="Erreurs d'anglais relevées à retravailler..."></textarea>
         </div>
 
         <div id="blocOralChamps2">
@@ -1355,7 +1344,7 @@ function openSession(id){
   document.getElementById("blocOralTop").classList.toggle("hidden", isCE);
   document.getElementById("blocCETop").classList.toggle("hidden", !isCE);
   document.getElementById("blocOralChamps1").classList.toggle("hidden", isCE);
-  document.getElementById("blocCEChamps").classList.toggle("hidden", !isCE);
+  document.getElementById("labelAppreciation").textContent = isCE ? "Appréciation générale et conseils" : "Appréciation générale";
   document.getElementById("blocOralChamps2").classList.toggle("hidden", isCE);
   document.getElementById("blocProgression").classList.toggle("hidden", isCE);
   document.getElementById("appreciationIndividuelleZone").classList.toggle("hidden", !isCE && session.mode === "groupe");
@@ -1950,7 +1939,6 @@ function onStudentChange(){
     document.getElementById("ceTotalInput").value = (rec && rec.ceTotal !== undefined && rec.ceTotal !== null) ? rec.ceTotal : "";
     updateCEEquivalent();
     document.getElementById("appreciationInput").value = rec ? (rec.appreciation || "") : "";
-    document.getElementById("erreursAnglaisInput").value = rec ? (rec.erreursAnglais || "") : "";
   }else{
     renderScoreInputs(rec);
     document.getElementById("pointAnglaisInput").value = rec ? (rec.pointAnglais || "") : "";
@@ -2386,7 +2374,6 @@ function saveEvaluation(advanceToNext){
       ceTotal: isAbs ? "ABS" : totalRaw,
       absenceStatus: isAbs ? state.currentAbsenceStatus : null,
       appreciation: document.getElementById("appreciationInput").value,
-      erreursAnglais: document.getElementById("erreursAnglaisInput").value,
       savedAt: new Date().toISOString()
     };
   }else{
@@ -2610,8 +2597,7 @@ function buildStudentPageHTML(studentName, sessionId){
       }
     }
 
-    html += "<div class=\"bloc\"><b>" + TXT.Appreciation + " " + TXT.generale + "</b>" + nl2br(rec.appreciation) + "</div>";
-    html += "<div class=\"bloc\"><b>Erreurs d'anglais \u00e0 revoir</b>" + nl2br(rec.erreursAnglais) + "</div>";
+    html += "<div class=\"bloc\"><b>" + TXT.Appreciation + " " + TXT.generale + " et conseils</b>" + nl2br(rec.appreciation) + "</div>";
     html += "</div>";
 
     var piecesArr = (session.grilleFiles || []).concat(session.corrigeFiles || []);
