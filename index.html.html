@@ -305,6 +305,22 @@
       ⚠️ Le stockage local de cet appareil ou de ce navigateur n'est pas disponible (navigation privée ou données de site bloquées) : vos saisies ne seront pas conservées. Téléchargez régulièrement vos PDF pour ne rien perdre.
     </div>
 
+    <div class="carte" id="carteSauvegarde">
+      <div class="row" style="align-items:center; justify-content:space-between; flex-wrap:nowrap;">
+        <h2 style="margin:0;">💾 Sauvegarde</h2>
+        <button class="btn btn-gris" id="btnToggleSauvegarde" style="flex:none;">Afficher</button>
+      </div>
+      <div id="sauvegardeDetail" class="hidden">
+        <p class="aide">Téléchargez régulièrement un fichier de sauvegarde contenant toutes vos classes et évaluations. En cas de problème (données disparues, changement de tablette), vous pourrez tout restaurer en important ce fichier.</p>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn btn-bleu" id="btnExporterSauvegarde" style="flex:none;">⬇️ Exporter une sauvegarde</button>
+          <button class="btn btn-gris" id="btnImporterSauvegarde" style="flex:none;">⬆️ Importer une sauvegarde</button>
+          <input type="file" id="fileInputSauvegarde" accept="application/json,.json" style="display:none;">
+        </div>
+        <p id="sauvegardeStatut" class="aide" style="margin-top:8px;"></p>
+      </div>
+    </div>
+
     <div id="view-setup">
       <div class="carte">
         <h2>1. Choisir ou créer une classe</h2>
@@ -776,6 +792,100 @@ function saveDB(){
 function genId(){
   idCounter++;
   return "s" + Date.now() + "_" + idCounter;
+}
+
+/* ---------- SAUVEGARDE (EXPORT / IMPORT) ---------- */
+function toggleSauvegardeDetail(){
+  var zone = document.getElementById("sauvegardeDetail");
+  zone.classList.toggle("hidden");
+  var btn = document.getElementById("btnToggleSauvegarde");
+  btn.textContent = zone.classList.contains("hidden") ? "Afficher" : "Masquer";
+}
+
+function pad2(n){
+  return ("0" + n).slice(-2);
+}
+
+function exporterSauvegarde(){
+  var statut = document.getElementById("sauvegardeStatut");
+  try{
+    var payload = {
+      app: "evaluations",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      db: state.db
+    };
+    var json = JSON.stringify(payload, null, 2);
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var d = new Date();
+    var nomFichier = "evaluations_sauvegarde_" + d.getFullYear() + pad2(d.getMonth()+1) + pad2(d.getDate()) + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + ".json";
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = nomFichier;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+    if(statut){
+      statut.textContent = "Sauvegarde téléchargée (" + nomFichier + "). Pensez à la ranger dans Fichiers ou à l'envoyer par AirDrop pour la garder en sécurité.";
+    }
+  }catch(e){
+    if(statut){ statut.textContent = "Erreur lors de l'export : " + e.message; }
+    alert("La sauvegarde n'a pas pu etre creee sur cet appareil.");
+  }
+}
+
+function declencherImportSauvegarde(){
+  document.getElementById("fileInputSauvegarde").click();
+}
+
+function importerSauvegarde(file){
+  var statut = document.getElementById("sauvegardeStatut");
+  if(!file){ return; }
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var data;
+    try{
+      data = JSON.parse(ev.target.result);
+    }catch(e){
+      if(statut){ statut.textContent = "Ce fichier n'est pas une sauvegarde valide."; }
+      alert("Ce fichier n'est pas une sauvegarde valide (JSON illisible).");
+      return;
+    }
+    var dbImporte = (data && data.db && data.db.classes) ? data.db : data;
+    if(!dbImporte || !dbImporte.classes || typeof dbImporte.classes !== "object"){
+      if(statut){ statut.textContent = "Ce fichier ne contient pas de donnees d'evaluations reconnues."; }
+      alert("Ce fichier ne contient pas de donnees d'evaluations reconnues.");
+      return;
+    }
+    var nbClassesImport = 0;
+    for(var k in dbImporte.classes){ if(dbImporte.classes.hasOwnProperty(k)){ nbClassesImport++; } }
+    var nbClassesActuel = 0;
+    for(var k2 in state.db.classes){ if(state.db.classes.hasOwnProperty(k2)){ nbClassesActuel++; } }
+    var msg = "Ce fichier contient " + nbClassesImport + " classe(s).\n\n";
+    msg += "Vous avez actuellement " + nbClassesActuel + " classe(s) sur cet appareil.\n\n";
+    msg += "OK = Fusionner (les classes du fichier remplacent les classes de meme nom, les autres classes actuelles sont conservees).\n";
+    msg += "Annuler = ne rien faire.";
+    var ok = confirm(msg);
+    if(!ok){ return; }
+    for(var nomClasse in dbImporte.classes){
+      if(!dbImporte.classes.hasOwnProperty(nomClasse)){ continue; }
+      state.db.classes[nomClasse] = dbImporte.classes[nomClasse];
+      migrateClass(state.db.classes[nomClasse]);
+    }
+    saveDB();
+    renderClassList();
+    if(state.currentClass && dbImporte.classes.hasOwnProperty(state.currentClass)){
+      selectClass(state.currentClass);
+    }
+    if(statut){ statut.textContent = "Import termine : " + nbClassesImport + " classe(s) restauree(s)/mise(s) a jour."; }
+    alert("Import termine. " + nbClassesImport + " classe(s) restauree(s).");
+  };
+  reader.onerror = function(){
+    if(statut){ statut.textContent = "Impossible de lire ce fichier."; }
+  };
+  reader.readAsText(file);
 }
 
 function todayISO(){
@@ -2756,6 +2866,15 @@ document.addEventListener("DOMContentLoaded", function(){
   document.getElementById("gateBtn").addEventListener("click", checkAuth);
   document.getElementById("gateInput").addEventListener("keydown", function(ev){
     if(ev.key === "Enter"){ checkAuth(); }
+  });
+
+  document.getElementById("btnToggleSauvegarde").addEventListener("click", toggleSauvegardeDetail);
+  document.getElementById("btnExporterSauvegarde").addEventListener("click", exporterSauvegarde);
+  document.getElementById("btnImporterSauvegarde").addEventListener("click", declencherImportSauvegarde);
+  document.getElementById("fileInputSauvegarde").addEventListener("change", function(ev){
+    var f = ev.currentTarget.files && ev.currentTarget.files[0];
+    importerSauvegarde(f);
+    ev.currentTarget.value = "";
   });
 
   document.getElementById("btnCreerClasse").addEventListener("click", createClass);
